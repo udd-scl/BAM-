@@ -839,18 +839,13 @@
                     const [start, end] = parsedRange;
                     if (weekdayName) {
                         const matches = findWeekdayDateInRange(start, end, weekdayMap[weekdayName]);
-                        if (matches.length === 1) {
-                            item.dates = matches;
-                        } else if (matches.length > 1) {
+                        if (matches.length >= 1) {
                             item.dates = [matches[0]];
                         }
                     }
+
                     if (item.dates.length === 0) {
-                        let current = new Date(start);
-                        while (current <= end) {
-                            item.dates.push(new Date(current));
-                            current.setDate(current.getDate() + 1);
-                        }
+                        item.dates = [new Date(start)];
                     }
                 } else if (parsedRange.length === 1) {
                     item.dates.push(parsedRange[0]);
