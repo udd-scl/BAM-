@@ -758,7 +758,8 @@
 
             const weekdayMap = {
                 lunes: 1, martes: 2, miercoles: 3, miércoles: 3, jueves: 4,
-                viernes: 5, sabado: 6, sábado: 6, domingo: 0
+                viernes: 5, sabado: 6, sábado: 6, domingo: 0,
+                l: 1, m: 2, w: 3, j: 4, v: 5, s: 6, d: 0
             };
 
             const normalize = (text) => text ? text.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '') : '';
@@ -829,26 +830,52 @@
                 return result;
             };
 
+            const getDayTokensFromText = (text) => {
+                const normalized = normalize(text || '');
+                const matches = new Set();
+                
+                const fullWords = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'];
+                fullWords.forEach((word) => {
+                    if (new RegExp(`\\b${word}\\b`).test(normalized)) {
+                        matches.add(weekdayMap[word]);
+                    }
+                });
+
+                const singleTokenMatches = normalized.match(/\b(l|m|w|j|v|s|d)\b/g) || [];
+                singleTokenMatches.forEach((token) => {
+                    matches.add(weekdayMap[token]);
+                });
+
+                return [...matches].sort((a, b) => a - b);
+            };
+
             sessionsData.forEach(item => {
                 item.dates = [];
                 const parsedRange = parseRangeDates(item.rangoFecha);
-                const dayText = normalize(item.dia || '');
-                const weekdayName = Object.keys(weekdayMap).find(name => dayText.includes(name));
+                const combinedText = `${item.dia || ''} ${item.tipoOriginal || ''} ${item.horario || ''}`;
+                const weekdayTokens = getDayTokensFromText(combinedText);
 
                 if (parsedRange.length === 2) {
                     const [start, end] = parsedRange;
-                    if (weekdayName) {
-                        const matches = findWeekdayDateInRange(start, end, weekdayMap[weekdayName]);
-                        if (matches.length >= 1) {
-                            item.dates = [matches[0]];
+
+                    if (weekdayTokens.length > 0) {
+                        const uniqueDates = [];
+                        weekdayTokens.forEach((weekday) => {
+                            const matches = findWeekdayDateInRange(start, end, weekday);
+                            uniqueDates.push(...matches);
+                        });
+                        if (uniqueDates.length > 0) {
+                            item.dates = [...new Map(uniqueDates.map(date => [`${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`, date])).values()];
                         }
                     }
 
                     if (item.dates.length === 0) {
-                        item.dates = [new Date(start)];
+                        const explicitDate = parseDateString(combinedText, start.getMonth());
+                        item.dates = explicitDate ? [explicitDate] : [new Date(start)];
                     }
                 } else if (parsedRange.length === 1) {
-                    item.dates.push(parsedRange[0]);
+                    const explicitDate = parseDateString(combinedText, parsedRange[0].getMonth());
+                    item.dates.push(explicitDate || parsedRange[0]);
                 }
 
                 if (item.dates.length === 0) {
@@ -862,10 +889,11 @@
 
         function selectMonth(monthIndex) {
             const buttons = document.querySelectorAll('#monthButtons button');
-            buttons.forEach((btn, idx) => {
-                btn.classList.toggle('bg-clinical-600', idx === monthIndex);
-                btn.classList.toggle('text-white', idx === monthIndex);
-                btn.classList.toggle('bg-slate-100', idx !== monthIndex);
+            buttons.forEach((btn) => {
+                const isSelected = btn.textContent === monthNames[monthIndex];
+                btn.classList.toggle('bg-clinical-600', isSelected);
+                btn.classList.toggle('text-white', isSelected);
+                btn.classList.toggle('bg-slate-100', !isSelected);
             });
 
             const calendarGrid = document.getElementById('calendarGrid');
@@ -886,7 +914,7 @@
             for (let day = 1; day <= monthDays[monthIndex]; day++) {
                 const cell = document.createElement('div');
                 const cellDate = new Date(2026, monthIndex, day);
-                const sessions = sessionsData.filter(item => Array.isArray(item.dates) && item.dates.some(d => d.getTime() === cellDate.getTime()));
+                const sessions = sessionsData.filter(item => Array.isArray(item.dates) && item.dates.some(d => d.getFullYear() === cellDate.getFullYear() && d.getMonth() === cellDate.getMonth() && d.getDate() === cellDate.getDate()));
                 const hasSession = sessions.length > 0;
 
                 cell.className = 'h-16 rounded-2xl p-2 border border-slate-200 bg-white flex flex-col justify-between';
